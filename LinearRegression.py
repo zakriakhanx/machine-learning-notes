@@ -1,10 +1,41 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import math
 
+housing_data = pd.read_csv('./Housing.csv')
+housing_data.head()
+housing_data.info()
+housing_data.describe(include='all')
+housing_data.isnull().sum()
+housing_data.duplicated().sum()
+housing_data.nunique()
+
+cat_col = housing_data.select_dtypes(include=['str']).columns
+cat_col
+
+# converting categorical values to numeric
+# mainroad: No=1  Yes=0
+housing_data['mainroad'].unique()
+# guestroom: No=0  Yes=1
+housing_data['guestroom'].unique()
+# basement: No=0  Yes=1
+housing_data['basement'].unique()
+# hotwaterheating: No=0  Yes=1
+housing_data['hotwaterheating'].unique()
+# airconditioning: NO=1  Yes=0
+housing_data['airconditioning'].unique()
+# prefarea: NO=1  Yes=0
+housing_data['prefarea'].unique()
+# furnishingstatus: 0=furnished 1=semi-furnished 2=unfurnished
+housing_data['furnishingstatus'].unique()
+
+
+
+
 # Training data: x_train is the input (size in 1000 sqft), y_train is the target (price in 1000s of dollars)
-x_train = np.array([1.0, 2.0])
-y_train = np.array([300.0, 500.0])
+x_train = housing_data['size'].values
+y_train = housing_data['price'].values
 print(f"x_train = {x_train}")
 print(f"y_train = {y_train}")
 
