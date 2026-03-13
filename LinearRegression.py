@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import math
+import copy
 
 housing_data = pd.read_csv('./Housing.csv')
 housing_data.head()
@@ -12,7 +13,7 @@ housing_data.duplicated().sum()
 housing_data.nunique()
 
 cat_col = housing_data.select_dtypes(include=['str']).columns
-cat_col
+print(cat_col)
 
 # converting categorical values to numeric
 # mainroad: No=1  Yes=0
@@ -30,160 +31,211 @@ housing_data['prefarea'].unique()
 # furnishingstatus: 0=furnished 1=semi-furnished 2=unfurnished
 housing_data['furnishingstatus'].unique()
 
+for col in cat_col:
+  print(col)
+  print((housing_data[col].unique()), list(range(housing_data[col].nunique())))
+  
+  housing_data[col] = housing_data[col].replace(housing_data[col].unique(), list(range(housing_data[col].nunique())))
+  
+print(housing_data)
 
+#saving clean data
+housing_data.to_csv("./Cleaned_Housing.csv", index=False)
 
-
-# Training data: x_train is the input (size in 1000 sqft), y_train is the target (price in 1000s of dollars)
-x_train = housing_data['size'].values
-y_train = housing_data['price'].values
-print(f"x_train = {x_train}")
+# Training data: x_train is the input,
+# y_train is the target Price (dollars)
+X_train = np.array(housing_data.drop('price', axis=1).values)
+y_train = np.array(housing_data['price'].values)
+print(f"x_train = {X_train}")
 print(f"y_train = {y_train}")
 
-# Index to select a specific training example (change to 1 to see the second example)
-i = 0
-x_i = x_train[i]
-y_i = y_train[i]
-print(f"(x^({i}), y^({i})) = ({x_i}, {y_i})")
+# Convert X_train to float to ensure math operations work
+X_train = X_train.astype(float)
 
-# Plot the data points for visualization
-plt.scatter(x_train, y_train, marker='x', c='r')
-plt.title("Housing Prices")
-plt.ylabel('Price (in 1000s of dollars)')
-plt.xlabel('Size (1000 sqft)')
-plt.show()
+# Feature Scaling: Z-Score Normalization
+def zscore_normalize_features(X):
+    mu = np.mean(X, axis=0)
+    sigma = np.std(X, axis=0)
+    X_norm = (X - mu) / sigma
+    return X_norm, mu, sigma
 
-# Cost function for linear regression
-def compute_cost(x, y, w, b): 
+
+def compute_cost(X, y, w, b): 
     """
     Computes the cost function for linear regression.
-    
     Args:
       x (ndarray (m,)): Data, m examples 
       y (ndarray (m,)): target values
-      w,b (scalar)    : model parameters  
+      w (ndarray (n,)) : model parameters  
+      b (scalar)       : model parameter  
     
     Returns
-        total_cost (float): The cost of using w,b as the parameters for linear regression
-               to fit the data points in x and y
+        cost (scalar): cost
     """
     # number of training examples
-    m = x.shape[0] 
-    
-    cost_sum = 0 
-    for i in range(m): 
-        f_wb = w * x[i] + b   # Model prediction for i-th example
-        cost = (f_wb - y[i]) ** 2  # Squared error
-        cost_sum = cost_sum + cost  
-    total_cost = (1 / (2 * m)) * cost_sum  # Mean squared error
-    return total_cost
+    m = X.shape[0] 
+    cost = 0.0
+    for i in range(m):                                
+        f_wb_i = np.dot(X[i], w) + b           #(n,)(n,) = scalar (see np.dot)
+        cost = cost + (f_wb_i - y[i])**2       #scalar
+    cost = cost / (2 * m)                      #scalar    
+    return cost
 
-# Compute the gradient of the cost function with respect to w and b
-def compute_gradient(x, y, w, b): 
+
+def compute_gradient(X, y, w, b): 
     """
     Computes the gradient for linear regression 
     Args:
-      x (ndarray (m,)): Data, m examples 
-      y (ndarray (m,)): target values
-      w,b (scalar)    : model parameters  
+      X (ndarray (m,n)): Data, m examples with n features
+      y (ndarray (m,)) : target values
+      w (ndarray (n,)) : model parameters  
+      b (scalar)       : model parameter
+      
     Returns:
-      dj_dw (scalar): The gradient of the cost w.r.t. the parameter w
-      dj_db (scalar): The gradient of the cost w.r.t. the parameter b     
-     """
-    
-    # Number of training examples
-    m = x.shape[0]    
-    dj_dw = 0
-    dj_db = 0
-    for i in range(m):  
-        f_wb = w * x[i] + b  # Model prediction
-        dj_dw_i = (f_wb - y[i]) * x[i]  # Partial derivative w.r.t. w
-        dj_db_i = f_wb - y[i]           # Partial derivative w.r.t. b
-        dj_db += dj_db_i
-        dj_dw += dj_dw_i 
-    dj_dw = dj_dw / m 
-    dj_db = dj_db / m 
-    return dj_dw, dj_db
-
-# Gradient descent algorithm for linear regression
-def gradient_descent(x, y, w_in, b_in, alpha, num_iters, cost_function, gradient_function): 
+      dj_dw (ndarray (n,)): The gradient of the cost w.r.t. the parameters w. 
+      dj_db (scalar):       The gradient of the cost w.r.t. the parameter b. 
     """
-    Performs gradient descent to fit w,b. Updates w,b by taking 
+    m,n = X.shape           #(number of examples, number of features)
+    dj_dw = np.zeros((n,))
+    dj_db = 0.
+
+    for i in range(m):                             
+        err = (np.dot(X[i], w) + b) - y[i]   
+        for j in range(n):                         
+            dj_dw[j] = dj_dw[j] + err * X[i, j]    
+        dj_db = dj_db + err                        
+    dj_dw = dj_dw / m                                
+    dj_db = dj_db / m                                
+        
+    return dj_db, dj_dw
+
+
+def gradient_descent(X, y, w_in, b_in, cost_function, gradient_function, alpha, num_iters): 
+    """
+    Performs batch gradient descent to learn w and b. Updates w and b by taking 
     num_iters gradient steps with learning rate alpha
     
     Args:
-      x (ndarray (m,))  : Data, m examples 
-      y (ndarray (m,))  : target values
-      w_in,b_in (scalar): initial values of model parameters  
-      alpha (float):     Learning rate
-      num_iters (int):   number of iterations to run gradient descent
-      cost_function:     function to call to produce cost
-      gradient_function: function to call to produce gradient
+      X (ndarray (m,n))   : Data, m examples with n features
+      y (ndarray (m,))    : target values
+      w_in (ndarray (n,)) : initial model parameters  
+      b_in (scalar)       : initial model parameter
+      cost_function       : function to compute cost
+      gradient_function   : function to compute the gradient
+      alpha (float)       : Learning rate
+      num_iters (int)     : number of iterations to run gradient descent
       
     Returns:
-      w (scalar): Updated value of parameter after running gradient descent
-      b (scalar): Updated value of parameter after running gradient descent
-      J_history (List): History of cost values
-      p_history (list): History of parameters [w,b] 
-    """
-    # Arrays to store cost and parameter history for plotting
+      w (ndarray (n,)) : Updated values of parameters 
+      b (scalar)       : Updated value of parameter 
+      """
+    
+    # An array to store cost J and w's at each iteration primarily for graphing later
     J_history = []
-    p_history = []
+    w = copy.deepcopy(w_in)  #avoid modifying global w within function
     b = b_in
-    w = w_in
+    
     for i in range(num_iters):
+
         # Calculate the gradient and update the parameters
-        dj_dw, dj_db = gradient_function(x, y, w , b)     
-        b = b - alpha * dj_db                            # Update bias
-        w = w - alpha * dj_dw                            # Update weight
-        # Save cost and parameters at each iteration
+        dj_db,dj_dw = gradient_function(X, y, w, b)   
+
+        # Update Parameters using w, b, alpha and gradient
+        w = w - alpha * dj_dw               
+        b = b - alpha * dj_db               
+      
+        # Save cost J at each iteration
         if i<100000:      # prevent resource exhaustion 
-            J_history.append( cost_function(x, y, w , b))
-            p_history.append([w,b])
-        # Print cost and parameters at regular intervals
-        if i% math.ceil(num_iters/10) == 0:
-            print(f"Iteration {i:4}: Cost {J_history[-1]:0.2e} ",
-                  f"dj_dw: {dj_dw: 0.3e}, dj_db: {dj_db: 0.3e}  ",
-                  f"w: {w: 0.3e}, b:{b: 0.5e}")
-    return w, b, J_history, p_history # Return final parameters and history
+            J_history.append( cost_function(X, y, w, b))
 
-# Initialize parameters for gradient descent
-w_init = 0
+        # Print cost every at intervals 10 times or as many iterations if < 10
+        if i% math.ceil(num_iters / 10) == 0:
+            print(f"Iteration {i:4d}: Cost {J_history[-1]:8.2f}   ")
+        
+    return w, b, J_history #return final w,b and J history for graphing
+
+
+X_train, mu, sigma = zscore_normalize_features(X_train)
+
+w_init = np.zeros(X_train.shape[1])
 b_init = 0
-iterations = 10000      # Number of iterations
-tmp_alpha = 1.0e-2      # Learning rate
 
-# Run gradient descent to fit the model
-w_final, b_final, J_hist, p_hist = gradient_descent(x_train ,y_train, w_init, b_init, tmp_alpha, 
-                                                    iterations, compute_cost, compute_gradient)
-print(f"(w,b) found by gradient descent: ({w_final:8.4f},{b_final:8.4f})")
+iterations = 1000
+alpha = 0.01
 
-# Make predictions for different house sizes
-print(f"1000 sqft house prediction {w_final*1.0 + b_final:0.1f} Thousand dollars")
-print(f"1200 sqft house prediction {w_final*1.2 + b_final:0.1f} Thousand dollars")
-print(f"2000 sqft house prediction {w_final*2.0 + b_final:0.1f} Thousand dollars")
+# Running gradient descent to fit the model
+w_final, b_final, J_hist = gradient_descent(X_train ,y_train, w_init, b_init, compute_cost, compute_gradient, alpha, iterations)
 
-# Compute the model's output (predictions) for input x
-def compute_model_output(x, w, b):
-    """
-    Computes the prediction of a linear model
-    Args:
-      x (ndarray (m,)): Data, m examples 
-      w,b (scalar)    : model parameters  
-    Returns
-      f_wb (ndarray (m,)): model prediction
-    """
-    m = x.shape[0]
-    f_wb = np.zeros(m)
-    for i in range(m):
-        f_wb[i] = w * x[i] + b  # Linear model prediction
-    return f_wb
+print(f"(w,b) found by gradient descent: ({w_final},{b_final})")
 
-# Plot the model's predictions against the actual data
-tmp_f_wb = compute_model_output(x_train, w_final, b_final)
-plt.plot(x_train, tmp_f_wb, c='b',label='Our Prediction')
-plt.scatter(x_train, y_train, marker='x', c='r',label='Actual Values')
-plt.title("Housing Prices")
-plt.ylabel('Price (in 1000s of dollars)')
-plt.xlabel('Size (1000 sqft)')
-plt.legend()
+# Plot cost versus iteration
+plt.figure(figsize=(10, 6))
+plt.plot(J_hist)
+plt.title("Cost Function J per Iteration")
+plt.ylabel('Cost')
+plt.xlabel('Iteration Step')
+plt.grid(True)
 plt.show()
+
+# Predicted vs. Actual Prices Plot
+# Get predictions for the entire training set
+y_pred = np.dot(X_train, w_final) + b_final
+# Plotting
+plt.figure(figsize=(8, 6))
+plt.scatter(y_train, y_pred, alpha=0.5, color='teal')
+# Plot the "Perfect Prediction" line
+max_val = max(max(y_train), max(y_pred))
+min_val = min(min(y_train), min(y_pred))
+plt.plot([min_val, max_val], [min_val, max_val], color='red', lw=2, linestyle='--')
+plt.xlabel("Actual Price")
+plt.ylabel("Predicted Price")
+plt.title("Actual vs. Predicted Housing Prices")
+plt.grid(True)
+plt.show()
+
+
+feature_names = housing_data.drop('price', axis=1).columns
+plt.figure(figsize=(10, 6))
+plt.barh(feature_names, w_final, color='skyblue')
+plt.xlabel("Weight Value (Importance)")
+plt.title("Impact of Each Feature on House Price")
+plt.show()
+
+
+# Mean Absolute Percentage Error (MAPE)
+mape = np.mean(np.abs((y_train - y_pred) / y_train)) * 100
+print(f"Mean Absolute Percentage Error: {mape:.2f}%")
+print(f"Model Accuracy (100 - MAPE): {100 - mape:.2f}%")
+
+
+def predict_house_price(raw_data, w, b, mu, sigma):
+    """
+    Takes raw house features, normalizes them, and returns a predicted price.
+    
+    Args:
+      raw_data (list or np.array): The 12 features of the house
+      w, b: Your trained model parameters
+      mu, sigma: Mean and StdDev from your training set
+    """
+    # 1. Convert to numpy array if it isn't one
+    x_input = np.array(raw_data)
+    
+    # 2. Normalize using training statistics (Crucial!)
+    x_norm = (x_input - mu) / sigma
+    
+    # 3. Compute prediction: y = wx + b
+    prediction = np.dot(x_norm, w) + b
+    
+    return prediction
+
+# --- TESTING IT ---
+
+my_house1 = [7500, 4, 2, 2, 1, 1, 1, 0, 1, 2, 1, 0]
+my_house2 = [3000, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2]
+
+price1 = predict_house_price(my_house1, w_final, b_final, mu, sigma)
+price2 = predict_house_price(my_house2, w_final, b_final, mu, sigma)
+
+print(f"--- Prediction Result ---")
+print(f"Estimated Market Value House1: ${price1:,.2f}")
+print(f"Estimated Market Value House2: ${price2:,.2f}")
