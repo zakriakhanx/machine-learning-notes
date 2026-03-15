@@ -13,7 +13,7 @@ housing_data.duplicated().sum()
 housing_data.nunique()
 
 cat_col = housing_data.select_dtypes(include=['str']).columns
-print(cat_col)
+print(f"Categorical columns: {list(cat_col)}")
 
 # converting categorical values to numeric
 # mainroad: No=1  Yes=0
@@ -37,10 +37,7 @@ for col in cat_col:
   
   housing_data[col] = housing_data[col].replace(housing_data[col].unique(), list(range(housing_data[col].nunique())))
   
-print(housing_data)
-
-#saving clean data
-housing_data.to_csv("./Cleaned_Housing.csv", index=False)
+print(housing_data.head())
 
 # Training data: x_train is the input,
 # y_train is the target Price (dollars)
